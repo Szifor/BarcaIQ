@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: barcaiq-api-service
+
+  # Redis config
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+
+  # Cache
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000  # 5 minutes in ms
+
+# FastAPI ML service URL
+ml:
+  service:
+    url: http://localhost:8000
+
+# JWT
+jwt:
+  secret: barcaiq-secret-key-for-jwt-signing-minimum-256-bits-long-enough
+  expiration: 86400000  # 24 hours in ms
+
+# Logging
+logging:
+  level:
+    com.barcaiq: DEBUG
+    org.springframework.security: INFO
+
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
