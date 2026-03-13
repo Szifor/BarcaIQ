@@ -142,33 +142,6 @@ Built on **929,856 StatsBomb events** across **249 matches**, the system extract
 
 ---
 
-## Project Structure
-
-```
-BarcaIQ/
-├── notebooks/
-│   ├── Untitled4.ipynb    # NB2: Full data pipeline (929K events)
-│   ├── Untitled5.ipynb    # NB5: Module 2 — GNN Tactical DNA
-│   ├── Untitled6.ipynb    # NB6: Module 3 — Press Trigger
-│   ├── Untitled7.ipynb    # NB7: Module 5 — RAG Assistant
-│   └── Untitled8.ipynb    # NB8: FastAPI ML Service
-├── api-service/           # Spring Boot Java API
-│   └── src/main/java/com/barcaiq/api_service/
-│       ├── controller/    # REST endpoints
-│       ├── service/       # MLService (WebClient + Redis)
-│       ├── model/         # Request/Response DTOs
-│       └── config/        # Security, Redis config
-└── frontend/              # Next.js 16 + TypeScript
-    └── src/app/
-        ├── page.tsx           # Dashboard
-        ├── press/page.tsx     # Tactical Press Board
-        ├── patterns/page.tsx  # Pattern Analysis
-        ├── chat/page.tsx      # RAG Assistant
-        └── components/
-            └── Navbar.tsx
-```
-
----
 
 ## Running Locally
 
@@ -234,8 +207,7 @@ npm run dev
 
 ## About
 
-Built by **Vikram Shriram** — CSE student at VIT Chennai.  
-FC Barcelona diehard. Targeting Barça Innovation Hub.
+Built by **V Shrinaath** — CSE student at VIT Chennai.  
 
 *Més que un club. Més que una dada.*
 
