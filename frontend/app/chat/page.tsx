@@ -44,21 +44,29 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const res = await axios.post(`${SPRING}/api/tactical/chat`, { question: text.trim() });
-      const answer = res.data?.answer ?? res.data?.response ?? res.data?.content ?? 'Received a response but could not parse it.';
-      setMessages(prev => prev.map(m => m.id === loadMsg.id ? { ...m, content: answer, loading: false } : m));
-    } catch {
-      const fallbacks: Record<string, string> = {
-        'dangerous': `Based on 17,638 possession sequences analysed:\n\n**Third-Man Combo** is Barça's most dangerous pattern with a 22.7% shot creation rate across 6,420 sequences. It involves a decoy run that draws a defender, creating a passing lane to a third player in space.\n\n**False Nine Drop** follows at 21.1% — MSN used this 62% more than Pep's era, with Messi dropping deep to create numerical superiority in midfield.\n\nThe GNN model (AUC 0.782) assigns highest shot probability to sequences containing third-man combinations in the final third.`,
-        'press'    : `From 30,312 Barça press events (Module 3, AUC 0.797):\n\n**Mid-third pressing is optimal** — 33.1% success vs 23.1% in the final third.\n\n**Trigger conditions for Flick:**\n• Press within first 2 actions of opponent possession (press_index ≤ 2)\n• Deploy 1-2 players maximum — success drops from 41.5% to 15.5% when 6+ players press\n• Avoid counterpress — only 21% success rate vs 40% for structured press\n\nThe most important feature (importance 0.458) is press_index — press EARLY or don't press at all.`,
-        'pep'      : `Era DNA comparison from 249 matches:\n\n**Pep Era (2008-12, 138 matches):**\n• 72.46 sequences/match — 5.2% more than MSN\n• Shorter sequences (9.00 passes avg)\n• Tighter player involvement (6.26 players/seq)\n• Inverted winger pattern dominant\n\n**MSN Era (2014-17, 111 matches):**\n• 68.82 sequences/match\n• Longer sequences (9.28 passes avg)\n• Wider structure (6.42 players/seq)\n• False nine drop 62% more common\n• 3.2% better shot conversion (15.32% vs 14.85%)\n\nGNN mean shot probability: MSN 39.97% vs Pep 38.45%.`,
-        'optimal'  : `From the press trigger analysis:\n\n**1 player pressing → 41.5% success** ✅\n**2 players pressing → 40.2% success** ✅\n**3 players pressing → 34.7% success** ⚠️\n**4-5 players pressing → 25.9% success** ❌\n**6+ players pressing → 15.5% success** ❌\n\nThe optimal is 1-2 players. The first closes down, the second covers the passing lane. Everyone else holds shape.`,
-        'counterpress': `Counterpress success rate is only **21%** compared to **40%** for structured pressing.\n\nWhen Barça lose the ball, players are in attacking positions and out of defensive shape. The opponent gains the ball in transition with Barça players ahead of the ball.\n\nFlick recommendation: **reset shape first**. Drop into defensive structure, then press on second or third opponent touch.`,
-        'pattern'  : `Shot creation rates by pattern (17,638 sequences):\n\n**Third-Man Combo — 22.7%** (6,420 seq)\n**False Nine Drop — 21.1%** (592 seq)\n**Inverted Winger — 18.7%** (1,421 seq)\n**Tiki-Taka Buildup — 13.3%** (1,380 seq)\n**Direct Attack — 11.8%** (1,239 seq)\n**Possession Keeping — 7.3%** (6,582 seq)\n\nThird-Man Combo is the clear leader — Barça should prioritise creating triangles that enable the third-man run.`,
-      };
-      const key = Object.keys(fallbacks).find(k => text.toLowerCase().includes(k));
-      const fallback = key ? fallbacks[key] : `⚠️ FastAPI service is offline. Start the Colab notebook to enable live RAG responses from Llama 3.3 70B.\n\nThis assistant is grounded in 249 Barça matches and provides tactically accurate responses based on StatsBomb data analysis.`;
-      setMessages(prev => prev.map(m => m.id === loadMsg.id ? { ...m, content: fallback, loading: false } : m));
+      const res = await axios.post(
+        `${SPRING}/api/tactical/chat`,
+        { question: text.trim() },
+        { timeout: 60000 }
+      );
+      const answer = res.data?.answer
+        ?? res.data?.response
+        ?? res.data?.content
+        ?? JSON.stringify(res.data);
+      setMessages(prev => prev.map(m =>
+        m.id === loadMsg.id ? { ...m, content: answer, loading: false } : m
+      ));
+    } catch (err: any) {
+      const isOffline =
+        err?.code === 'ERR_NETWORK' ||
+        err?.response?.status === 503 ||
+        err?.response?.data?.status === '503';
+      const fallback = isOffline
+        ? `⚠️ FastAPI service is offline. Start the Colab notebook to enable live RAG responses from Llama 3.3 70B.`
+        : `Error: ${err?.response?.data?.detail ?? err?.message ?? 'Unexpected error'}`;
+      setMessages(prev => prev.map(m =>
+        m.id === loadMsg.id ? { ...m, content: fallback, loading: false } : m
+      ));
     } finally {
       setLoading(false);
     }

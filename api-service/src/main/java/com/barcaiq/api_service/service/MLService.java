@@ -22,7 +22,10 @@ public class MLService {
     private final WebClient.Builder webClientBuilder;
 
     private WebClient client() {
-        return webClientBuilder.baseUrl(mlServiceUrl).build();
+        return webClientBuilder
+            .baseUrl(mlServiceUrl)
+            .defaultHeader("bypass-tunnel-reminder", "true")
+            .build();
     }
 
     public Map<?, ?> predictPress(PressRequest req) {
