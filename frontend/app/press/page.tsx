@@ -1,5 +1,6 @@
 'use client';
-
+const SPRING = 'http://localhost:8080';
+import axios from 'axios';
 import { useState, useRef, useCallback } from 'react';
 
 const PW = 800;
@@ -30,6 +31,7 @@ interface AnalysisResult {
   zoneName        : string;
   overallStrategy : string;
   pressIndex      : number;
+  modelActive     : boolean
 }
 
 const defaultPlayers: Player[] = [
@@ -131,53 +133,102 @@ export default function PressPage() {
     setEditingId(null);
   };
 
-  const analysePress = () => {
-    const normX    = ballCarrier.x / PW;
-    const zoneName = getZoneName(normX);
+const analysePress = async () => {
+  const normX    = ballCarrier.x / PW;
+  const zoneName = getZoneName(normX);
 
-    const allBarca = players
-      .filter(p => p.team === 'barca')
-      .map(p => ({ ...p, dist: Math.sqrt((p.x - ballCarrier.x) ** 2 + (p.y - ballCarrier.y) ** 2) }))
-      .sort((a, b) => a.dist - b.dist);
+  const allBarca = players
+    .filter(p => p.team === 'barca')
+    .map(p => ({ ...p, dist: Math.sqrt((p.x - ballCarrier.x) ** 2 + (p.y - ballCarrier.y) ** 2) }))
+    .sort((a, b) => a.dist - b.dist);
 
-    const candidates = allBarca.slice(0, 4);
-    const rest       = allBarca.slice(4);
+  const candidates = allBarca.slice(0, 4);
+  const rest       = allBarca.slice(4);
 
-    const analyses: PressAnalysis[] = candidates.map(p => ({
+  // Try real GBM model first
+  let globalProb   = 0.38;
+  let globalRec    = '';
+  let globalWarn   = '';
+  let modelActive  = false;
+
+  try {
+    console.log("Calling GBM with pressIndex:", pressIndex, "counterpress:", counterpress);
+    const res = await axios.post(`${SPRING}/api/tactical/press`, {
+      normX,
+      normY              : ballCarrier.y / PH,
+      isFinalThird       : normX >= 0.667 ? 1 : 0,
+      isMidThird         : normX >= 0.333 && normX < 0.667 ? 1 : 0,
+      isLeftFlank        : ballCarrier.y / PH < 0.333 ? 1 : 0,
+      isRightFlank       : ballCarrier.y / PH > 0.667 ? 1 : 0,
+      minute             : 35,
+      isFirstHalf        : 1,
+      isCounterpress     : counterpress ? 1 : 0,
+      teammatePressing   : 2,
+      pressIndexInPossession: pressIndex,
+    }, { timeout: 15000 })
+    console.log("GBM response:", res.data);;
+
+    globalProb   = res.data.success_probability;
+    globalRec    = res.data.recommendation;
+    globalWarn   = res.data.warning;
+    modelActive  = true;
+  } catch {
+    // FastAPI offline — fall back to formula
+    globalProb = calcPressProb(100, normX, 2, pressIndex, counterpress);
+  }
+
+  // Per-player probabilities — scale by distance from global
+  const analyses: PressAnalysis[] = candidates.map(p => {
+  const distFactor = isNaN(p.dist) ? 0.8 : Math.max(0.5, 1 - (p.dist / 400));
+  const baseProb   = isNaN(globalProb) ? 0.38 : globalProb;
+  const prob       = modelActive
+    ? Math.min(0.92, Math.max(0.08, baseProb * distFactor))
+    : calcPressProb(p.dist, normX, 1, pressIndex, counterpress);
+    return {
       playerId          : p.id,
       name              : p.name,
-      successProbability: calcPressProb(p.dist, normX, 1, pressIndex, counterpress),
+      successProbability: parseFloat(prob.toFixed(4)),
       distanceToBall    : p.dist,
       recommendation    : '',
       role              : p.role,
-    })).sort((a, b) => b.successProbability - a.successProbability);
+    };
+  }).sort((a, b) => b.successProbability - a.successProbability);
 
-    const holdRest: PressAnalysis[] = rest.map(p => ({
+  const holdRest: PressAnalysis[] = rest.map(p => {
+    const distFactor = isNaN(p.dist) ? 0.5 : Math.max(0.3, 1 - (p.dist / 500));
+    const baseProb   = isNaN(globalProb) ? 0.38 : globalProb;
+    return {
       playerId          : p.id,
       name              : p.name,
-      successProbability: calcPressProb(p.dist, normX, 1, pressIndex, counterpress),
+      successProbability: parseFloat((modelActive ? baseProb * distFactor * 0.7 : calcPressProb(p.dist, normX, 1, pressIndex, counterpress)).toFixed(4)),
       distanceToBall    : p.dist,
       recommendation    : '',
       role              : p.role,
-    }));
+    };
+  });
 
-    const top       = analyses[0];
-    const second    = analyses[1];
-    const addSecond = second.successProbability > 0.35 && second.distanceToBall < 200;
-    const primaryPressers = addSecond ? [top, second] : [top];
-    const holdPlayers = [...analyses.slice(addSecond ? 2 : 1), ...holdRest.slice(0, 3)].slice(0, 4);
+  const top       = analyses[0];
+  const second    = analyses[1];
+  const addSecond = second.successProbability > 0.35 && second.distanceToBall < 200;
+  const primaryPressers = addSecond ? [top, second] : [top];
+  const holdPlayers = [...analyses.slice(addSecond ? 2 : 1), ...holdRest.slice(0, 3)].slice(0, 4);
 
-    const names   = primaryPressers.map(p => p.name).join(' + ');
-    const avgProb = primaryPressers.reduce((s, p) => s + p.successProbability, 0) / primaryPressers.length;
+  const names   = primaryPressers.map(p => p.name).join(' + ');
+  const avgProb = isNaN(primaryPressers.reduce((s, p) => s + p.successProbability, 0) / primaryPressers.length)
+    ? globalProb
+    : primaryPressers.reduce((s, p) => s + p.successProbability, 0) / primaryPressers.length;
+  // Use real GBM recommendation if available
+  console.log("modelActive:", modelActive, "globalRec:", globalRec, "globalProb:", globalProb);
+  const strategy = modelActive && globalRec
+    ? `${avgProb >= 0.5 ? '✅' : avgProb >= 0.35 ? '⚠️' : '❌'} ${globalRec} — ${names} ${primaryPressers.length === 1 ? 'closes down' : 'coordinate press'}. GBM probability: ${(avgProb * 100).toFixed(0)}%.${globalWarn ? ` ⚠ ${globalWarn}` : ''}`
+    : avgProb >= 0.50
+    ? `✅ PRESS NOW — ${names} ${primaryPressers.length === 1 ? 'closes down' : 'coordinate press'}. Success: ${(avgProb * 100).toFixed(0)}%.`
+    : avgProb >= 0.35
+    ? `⚠️ CAUTIOUS — ${names} can press. Risk moderate (${(avgProb * 100).toFixed(0)}%).`
+    : `❌ HOLD SHAPE — No optimal presser (${(avgProb * 100).toFixed(0)}%). Reorganise.`;
 
-    const strategy = avgProb >= 0.50
-      ? `✅ PRESS NOW — ${names} ${primaryPressers.length === 1 ? 'closes down' : 'coordinate press'}. Success probability: ${(avgProb * 100).toFixed(0)}%. Others hold shape and cover lanes.`
-      : avgProb >= 0.35
-      ? `⚠️ CAUTIOUS PRESS — ${names} can press but risk is moderate (${(avgProb * 100).toFixed(0)}%). Ensure cover before committing.`
-      : `❌ HOLD SHAPE — No optimal presser available (best: ${(avgProb * 100).toFixed(0)}%). Barça should retreat and reorganise.`;
-
-    setResult({ primaryPressers, holdPlayers, zoneName, overallStrategy: strategy, pressIndex });
-  };
+  setResult({ primaryPressers, holdPlayers, zoneName, overallStrategy: strategy, pressIndex, modelActive });
+};
 
   const RosterPanel = ({ team }: { team: 'barca' | 'opponent' }) => {
     const color = team === 'barca' ? 'var(--barca-blue)' : 'var(--senyera-red)';
@@ -364,6 +415,17 @@ export default function PressPage() {
                 <div className="mono" style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '2px', marginBottom: '4px' }}>PRESS ZONE</div>
                 <div className="display" style={{ fontSize: '22px', color: 'var(--gold)', letterSpacing: '2px' }}>{result.zoneName}</div>
                 <div className="mono" style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>OPPONENT ACTION #{result.pressIndex} IN POSSESSION</div>
+              </div>
+              <div style={{
+                display:'flex', alignItems:'center', gap:'6px',
+                padding:'5px 10px', borderRadius:'4px',
+                background: result.modelActive ? 'rgba(0,200,150,0.1)' : 'rgba(237,187,77,0.1)',
+                border: `1px solid ${result.modelActive ? 'rgba(0,200,150,0.3)' : 'rgba(237,187,77,0.3)'}`,
+              }}>
+              <div style={{ width:'6px', height:'6px', borderRadius:'50%', background: result.modelActive ? 'var(--success)' : 'var(--gold)' }} />
+                <span className="mono" style={{ fontSize:'10px', color: result.modelActive ? 'var(--success)' : 'var(--gold)', letterSpacing:'1px' }}>
+                  {result.modelActive ? '● LIVE GBM MODEL' : '○ FORMULA FALLBACK'}
+              </span>
               </div>
               <div className="card" style={{ borderLeft: `3px solid ${result.overallStrategy.startsWith('✅') ? 'var(--success)' : result.overallStrategy.startsWith('⚠') ? 'var(--gold)' : 'var(--barca-red)'}`, padding: '1rem' }}>
                 <div className="mono" style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '2px', marginBottom: '8px' }}>AI RECOMMENDATION</div>

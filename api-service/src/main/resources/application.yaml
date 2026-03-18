@@ -18,7 +18,7 @@ spring:
 # FastAPI ML service URL
 ml:
   service:
-    url: https://empty-snails-punch.loca.lt/
+    url: https://tasty-words-hug.loca.lt/
 
 # JWT
 jwt:

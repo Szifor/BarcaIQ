@@ -8,6 +8,7 @@ const navLinks = [
   { href: '/press',            label: 'PRESS'       },
   { href: '/patterns',         label: 'PATTERNS'    },
   { href: '/chat',             label: 'ASSISTANT'   },
+  { href: '/classify',         label: 'CLASSIFY'    },
 ];
 
 export default function Navbar() {

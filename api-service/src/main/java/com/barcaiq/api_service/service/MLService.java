@@ -21,11 +21,26 @@ public class MLService {
 
     private final WebClient.Builder webClientBuilder;
 
+
     private WebClient client() {
         return webClientBuilder
             .baseUrl(mlServiceUrl)
             .defaultHeader("bypass-tunnel-reminder", "true")
             .build();
+    }
+
+    public Map<?, ?> predictSequence(Map<String, Object> body) {
+        try {
+            return client().post()
+                .uri("/predict/sequence")
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+        } catch (Exception e) {
+            log.error("FastAPI unavailable: {}", e.getMessage());
+            return Map.of("error", "ML service unavailable", "status", "503");
+        }
     }
 
     public Map<?, ?> predictPress(PressRequest req) {

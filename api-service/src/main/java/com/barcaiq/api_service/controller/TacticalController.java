@@ -49,4 +49,9 @@ public class TacticalController {
     public ResponseEntity<Map<?, ?>> getSummary() {
         return ResponseEntity.ok(mlService.getSummary());
     }
+
+    @PostMapping("/sequence")
+    public ResponseEntity<?> predictSequence(@RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(mlService.predictSequence(body));
+    }
 }
