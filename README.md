@@ -1,6 +1,6 @@
 # BarçaIQ — AI Tactical Intelligence System
 
-> **Built for Barça Innovation Hub** · FC Barcelona's Juego de Posición, quantified.
+> FC Barcelona's Juego de Posición, quantified.
 
 ![Barça](https://img.shields.io/badge/FC%20Barcelona-A50044?style=for-the-badge&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-004D98?style=for-the-badge&logo=python&logoColor=white)
